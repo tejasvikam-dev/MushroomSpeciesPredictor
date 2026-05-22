@@ -23,18 +23,26 @@ image_exts = (
     ".nef", ".orf", ".sr2", ".eps", ".jp2", ".j2k", ".jpf", 
     ".jpx", ".jpm", ".mj2")
 
-for idx in os.listdir(data_directory)[:100]:
+for root, dirs, files in os.walk(data_directory):
+    for file in files:
 #making sure that we are not displaying the wrong filetypes if they exist
-    if idx.lower().endswith(image_exts):
-        img_path =  os.path.join(data_directory, idx)
-        images.append(img_path)
-        label.append(idx)
+     if file.lower().endswith(image_exts):
+        img_path = os.path.join(root, file)
+#saving image paths 
+        img = Image.open(img_path)
+        images.append(img)
+        label.append(file)
+        # Stop once we have 100 images
+        if len(images) >= 100:
+            break
+    if len(images) >= 100:
+        break
 
 
 for idx, image in enumerate (images):
-    plt1 = plt.subplot(100, 100, idx+1)
+    plt1 = plt.subplot(10, 10, idx+1)
     plt1.imshow(image)
-    plt1.set_title(labels[idx])
+    plt1.set_title(label[idx])
     plt1.axis('off')
 plt.tight_layout()
 plt.show()
