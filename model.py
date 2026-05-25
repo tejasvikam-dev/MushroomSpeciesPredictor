@@ -72,7 +72,7 @@ test_transforms = v2.Compose([
 
 
 # split data
-ouptut_dir = "data_split"
+output_dir = "data_split"
 
 splitfolders.ratio(data_directory, output=output_dir, seed=42, ratio=(0.7, 0.15, 0.15))
 
@@ -85,4 +85,10 @@ train_loader = DataLoader(train_data, batch_size=32, shuffle=True)
 val_loader =  DataLoader(val_data, batch_size=32, shuffle=False)
 test_loader = DataLoader(test_data, batch_size=32, shuffle=False)
 
-
+# Loops over dataloaders
+print("\nLoading batches...")
+for name, loader in[("Train", train_loader), ("Validation", val_loader), ("Test", test_loader)]:
+    for inputs, targets in loader:
+        print(f"{name} Batch Loaded:")
+        print(f"    Inputs Shape: {inputs.shape} | Outputs/Labels Shape: {targets.shape}")
+        
