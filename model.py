@@ -9,6 +9,7 @@ from torch.utils.data import DataLoader
 from torchvision.datasets import ImageFolder
 import torch
 import torch.nn as nn
+import wandb
 
 # Download latest version of the mushroom dataset
 path = kagglehub.dataset_download("dariobaumberger/combined-kaggle-mushrooms-dataset")
@@ -197,31 +198,125 @@ for batch_idx, (inputs, targets) in enumerate(test_loader):
 print("\nAll data loaders are verified.")
 
 
+
+
+# establishing where processes will happen
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 # Creating Convolution Layer
 
 
 class ConvNet(nn.Module):
-    def _init_(self):
-        super()._init_()
+    def __init__(self, num_classes):
+        super().__init__()
         # 3 input channels 32 output
         self.conv1 = nn.Conv2d(3, 32, 3, 1, 1)
         # 32 input 64 output
         self.conv2 = nn.Conv2d(32, 64, 3, 1, 1)
+
         self.pool = nn.MaxPool2d(2,2)
+
         # channels * height * width
         self.fc1 = nn.Linear(64*56*56,512)
-        self.fc2 = nn.Linear(512,100)
-        # 100 classes
-        self.relu = nn.ReLU
+        self.fc2 = nn.Linear(512, num_classes)
 
+        # 100 classes
+        self.relu = nn.ReLU()
 
 # forward function
-def forward(self, X):
-    X = self.relu(self.conv1(X))
-    X = self.pool(X)
-    X = self.relu(self.conv2(X))
-    X = self.pool(X)
-    X = X.flatten(starm_dim=1)
-    X = self.relu(self.fc1(X))
-    output = self.fc2(X)
-    return output
+    def forward(self, X):
+        X = self.relu(self.conv1(X))
+        X = self.pool(X)
+        X = self.relu(self.conv2(X))
+        X = self.pool(X)
+        X = X.flatten(start_dim=1)
+        X = self.relu(self.fc1(X))
+        output = self.fc2(X)
+        return output
+
+
+num_classes = len(train_dataset.classes)
+model = ConvNet(num_classes=num_classes).to(device)
+
+criterion = nn.CrossEntropyLoss()
+optimizer = torch.optim.Adam(model.parameters(), lr = 0.01)
+num_epochs = 5
+
+
+
+
+
+print("\nStarting Training Loop")
+for epoch in range(num_epochs):
+    model.train()
+    running_loss = 0.0
+    correct_train = 0
+    total_train = 0
+    
+    for batch_idx, (inputs, targets) in enumerate(train_loader):
+        inputs, targets = inputs.to(device), targets.to(device)
+        
+        outputs = model(inputs)
+        loss = criterion(outputs, targets)
+        
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+        
+        running_loss += loss.item() * inputs.size(0)
+        _, predicted = outputs.max(1)
+        total_train += targets.size(0)
+        correct_train += predicted.eq(targets).sum().item()
+        
+    epoch_loss = running_loss / len(train_loader.dataset)
+    epoch_train_acc = 100.0 * correct_train / total_train
+    
+    # validation check
+    model.eval()
+    correct_val = 0
+    total_val = 0
+    
+    with torch.no_grad():
+        for inputs, targets in val_loader:
+            inputs, targets = inputs.to(device), targets.to(device)
+            outputs = model(inputs)
+            _, predicted = outputs.max(1)
+            total_val += targets.size(0)
+            correct_val += predicted.eq(targets).sum().item()
+            
+    epoch_val_acc = 100.0 * correct_val / total_val
+    
+    print(f"Epoch [{epoch+1}/{num_epochs}] | Train Loss: {epoch_loss:.4f} | Train Acc: {epoch_train_acc:.2f}% | Val Acc: {epoch_val_acc:.2f}%")
+    
+    # log metrics to WandB
+    wandb.log({
+        "train_loss": epoch_loss, 
+        "train_accuracy": epoch_train_acc,
+        "val_accuracy": epoch_val_acc
+    })
+
+print("Training complete.")
+
+# final test evaluation
+print("\nRunning Final Test Evaluation...")
+model.eval()
+correct_test = 0
+total_test = 0
+
+with torch.no_grad():
+    for inputs, targets in test_loader:
+        inputs, targets = inputs.to(device), targets.to(device)
+        outputs = model(inputs)
+        _, predicted = outputs.max(1)
+        total_test += targets.size(0)
+        correct_test += predicted.eq(targets).sum().item()
+
+final_test_acc = 100.0 * correct_test / total_test
+print(f"=== Final Test Accuracy: {final_test_acc:.2f}% ===")
+wandb.log({"final_test_accuracy": final_test_acc})
+
+# save the model state dictionary for deployment
+torch.save(model.state_dict(), "mushroom_model.pt")
+print("Model state saved to mushroom_model.pt")
+
+wandb.finish()
