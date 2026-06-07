@@ -189,7 +189,7 @@ class ConvNet(nn.Module):
         # 64 input 128 output
         self.conv3 = nn.Conv2d(64, 128, 3, 1, 1)
         # 128 input 256 output
-        self.conv3 = nn.Conv2d(128, 256, 3, 1, 1)
+        self.conv4 = nn.Conv2d(128, 256, 3, 1, 1)
         self.pool = nn.MaxPool2d(2,2)
 
         # 50% drouput rate
