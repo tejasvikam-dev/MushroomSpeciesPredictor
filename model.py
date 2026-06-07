@@ -1,4 +1,3 @@
-import kagglehub
 import matplotlib.pyplot as plt
 from PIL import Image
 import os
@@ -11,29 +10,26 @@ import torch
 import torch.nn as nn
 import torchvision.models as models
 import wandb
+from torch.optim.lr_scheduler import ExponentialLR
 
-# Download latest version of the mushroom dataset
-output_split_dir = r"C:\Users\stefa\OneDrive\Documents\GitHub\CMPM\MushroomSpeciesPredictor\data_split"
 
-# Loading 100 images for visual inspection
+# defining where our data is stored
+output_split_dir = "data_split"
 
+# loading 100 images for visual inspection
 images = []
 label = []
 image_exts = (
     ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tiff", ".tif", 
     ".webp", ".heic", ".heif", ".svg", ".ico", ".raw", ".cr2", 
     ".nef", ".orf", ".sr2", ".eps", ".jp2", ".j2k", ".jpf", 
-    ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tiff", ".tif",
-    ".webp", ".heic", ".heif", ".svg", ".ico", ".raw", ".cr2",
-    ".nef", ".orf", ".sr2", ".eps", ".jp2", ".j2k", ".jpf",
-    ".jpx", ".jpm", ".mj2")
-# Stefan's part ---
-# 's part ---
+    ".jpx", ".jpm", ".mj2"
+)
+
 print("Loading 100 images from the train split")
 train_dir = os.path.join(output_split_dir, "train")
 
-
-# Using os.walk to go through all folders and subfolders
+# using os.walk to go through all folders and subfolders
 for root, dirs, files in os.walk(train_dir):
     for file in files:
         if file.lower().endswith(image_exts):
@@ -50,17 +46,13 @@ for root, dirs, files in os.walk(train_dir):
     if len(images) >= 100:
         break
 
-    
-    # Loop exactly 100 times to fill the 10x10 grid
-# Teja's part:
-
-# Checking what sizes are in dataset before resizing
+# checking what sizes are in dataset before resizing
 sizes = [img.size for img in images]
 unique_sizes = set(sizes)
 print(f"Unique image sizes found: {unique_sizes}")
 print(f"Total unique sizes: {len(unique_sizes)}")
 
-# Displaying all 100 images in a 10x10 grid for  visual inspection
+# displaying all 100 images in a 10x10 grid 
 fig = plt.figure(figsize=(20, 20))
 for idx, image in enumerate(images):
     plt1 = plt.subplot(10, 10, idx + 1)
@@ -70,33 +62,30 @@ for idx, image in enumerate(images):
     plt1.axis('off')
 
 plt.tight_layout()
-plt.savefig(r"C:\Users\stefa\OneDrive\Documents\GitHub\CMPM\MushroomSpeciesPredictor\display.png", dpi=100)
+# saving to file 
+plt.savefig("display.png", dpi=100)
 print("Saved EDA grid to display.png")
 
-# 2. Pop it up on your screen so you can see it with your own eyes!
 plt.show() 
 
-# 3. Close it out of memory
 plt.close()
-# Splitting the data into TRAIN TEST VAL: 
 
+# Splitting the data into TRAIN TEST VAL: 
 # Using splitfolders to organize our raw images into train/val/test splits
 # ratio is (train, val, test) - 70% train, 15% val, 15% test
 
 
-# Setting up TRAIN/ TEST/ VAL: 
-
-# using augmentation (Stefan Contributed)
+# using augmentation 
 train_transforms = v2.Compose([
-    v2.ToTensor(),
     v2.ToImage(),                                        # Converting PIL image into somethign the tensor can understand
     v2.ToDtype(torch.float32, scale=True),               # Scaling pixel values to (0, 1)
-    v2.Resize((224, 224)),                               # Resizing all images to the same sizes
+    v2.Resize((224, 224)),                                       # Resizing all images to the same sizes
+    v2.RandomResizedCrop(size=(224, 224), scale=(0.8, 1.0)),                 # randomly cropping and resizing          
     v2.RandomHorizontalFlip(p=0.5),                      # Randomly flipping horizontally - as mushrooms can be found from any angle
     v2.RandomVerticalFlip(p=0.2),                        
-    v2.RandomRotation(degrees=30),                       # Rotating up to 30 degrees - mushrooms grow at various angles
+    v2.RandomRotation(degrees=45),                       # Rotating up to 30 degrees - mushrooms grow at various angles
     v2.ColorJitter(brightness=0.3, contrast=0.3,         # Randomly changing lighting since photos are taken in different conditions
-                   saturation=0.3, hue=0.1),
+                   saturation=0.3, hue=0.5),
     v2.RandomGrayscale(p=0.1),                           # removing color
     v2.RandomPerspective(distortion_scale=0.3, p=0.3),  
     v2.Normalize(mean=[0.485, 0.456, 0.406],             # Normalizing using ImageNet stats since mushroom images are natural photos
@@ -105,7 +94,6 @@ train_transforms = v2.Compose([
 
 # Val/test transforms - no augmentation, just resize, tensor, and normalize
 val_test_transforms = v2.Compose([
-    v2.ToTensor(),
     v2.ToImage(),
     v2.ToDtype(torch.float32, scale=True),
     v2.Resize((224, 224)),                               # Resizing to match train size
@@ -113,9 +101,7 @@ val_test_transforms = v2.Compose([
                  std=[0.229, 0.224, 0.225]),
 ])
 
-
 # Using ImageFolder to create train, val, and test dataset objects
-
 # allowing ImageFolder to reads the subfodders as labels for the classes
 train_dataset = ImageFolder(
     root=os.path.join(output_split_dir, "train"),
@@ -137,15 +123,13 @@ print(f"Val samples:   {len(val_dataset)}")
 print(f"Test samples:  {len(test_dataset)}")
 print(f"Classes: {train_dataset.classes}")
 
-
 # Using DataLoaders for loading batches of data during training (Teja and Stefan worked together)
-
 # shuffling training data each epoch
 train_loader = DataLoader(
     train_dataset,
     batch_size=32,
     shuffle=True,       # Shuffling train data so the model doesnt memorize order
-    num_workers=0,
+    num_workers=4,
     pin_memory=True
 )
 
@@ -154,7 +138,7 @@ val_loader = DataLoader(
     val_dataset,
     batch_size=32,
     shuffle=False,
-    num_workers=0,
+    num_workers=4,
     pin_memory=True
 )
 
@@ -163,12 +147,11 @@ test_loader = DataLoader(
     test_dataset,
     batch_size=32,
     shuffle=False,
-    num_workers=0,
+    num_workers=4,
     pin_memory=True
 )
 
 # Looping through data
-
 # Looping through train loader to check that inputs and outputs match up
 print("\nChecking Train Loader... ")
 for batch_idx, (inputs, targets) in enumerate(train_loader):
@@ -192,22 +175,10 @@ for batch_idx, (inputs, targets) in enumerate(test_loader):
 
 print("\nAll data loaders are verified.")
 
-
-
-
 # establishing where processes will happen
-
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-
-
-
-
-
-
 # Creating Convolution Layer
-
-
 class ConvNet(nn.Module):
     def __init__(self, num_classes):
         super().__init__()
@@ -217,7 +188,7 @@ class ConvNet(nn.Module):
         self.conv2 = nn.Conv2d(32, 64, 3, 1, 1)
 
         self.pool = nn.MaxPool2d(2,2)
-
+        self.dropout = nn.Dropout(p=0.5)
         # channels * height * width
         self.fc1 = nn.Linear(64*56*56,512)
         self.fc2 = nn.Linear(512, num_classes)
@@ -233,21 +204,29 @@ class ConvNet(nn.Module):
         X = self.pool(X)
         X = X.flatten(start_dim=1)
         X = self.relu(self.fc1(X))
+        X = self.dropout(X)
         output = self.fc2(X)
         return output
-
 
 num_classes = len(train_dataset.classes)
 model = ConvNet(num_classes=num_classes).to(device)
 
+
+# compares predictions to actual answers - scores it
 criterion = nn.CrossEntropyLoss()
-optimizer = torch.optim.Adam(model.parameters(), lr = 0.01)
-# Add this before setting num_epochs
+
+# changes weights depending on how it is scored
+optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=0.001)
+
+# learning rate decay - decreases learning rate after each epoch
+scheduler = ExponentialLR(optimizer, gamma=0.9)
+
+# wandb settings 
 wandb.init(project="MushroomSpeciesPredictor", name="CNN_run_1")
-num_epochs = 5
 
 
 
+num_epochs = 32
 
 
 print("\nStarting Training Loop")
@@ -258,20 +237,31 @@ for epoch in range(num_epochs):
     total_train = 0
     
     for batch_idx, (inputs, targets) in enumerate(train_loader):
+
+        # send batches to runpod gpu
         inputs, targets = inputs.to(device), targets.to(device)
         
+        # completing forward pass
         outputs = model(inputs)
+
         loss = criterion(outputs, targets)
-        
+
+        # clears weights for next batch
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
-        
+
+        # adding up the penalty points for this batch
         running_loss += loss.item() * inputs.size(0)
+
+        # grabbing the single highest-confidence guess for each image
         _, predicted = outputs.max(1)
+
+        # keeping a running tally of how many it got right
         total_train += targets.size(0)
         correct_train += predicted.eq(targets).sum().item()
         
+     # calculating the final grade for this round of training   
     epoch_loss = running_loss / len(train_loader.dataset)
     epoch_train_acc = 100.0 * correct_train / total_train
     
@@ -279,7 +269,7 @@ for epoch in range(num_epochs):
     model.eval()
     correct_val = 0
     total_val = 0
-    
+    # turning off weight calculation
     with torch.no_grad():
         for inputs, targets in val_loader:
             inputs, targets = inputs.to(device), targets.to(device)
@@ -298,6 +288,8 @@ for epoch in range(num_epochs):
         "train_accuracy": epoch_train_acc,
         "val_accuracy": epoch_val_acc
     })
+    # step at end of epoch
+    scheduler.step()
 
 print("Training complete.")
 
@@ -307,19 +299,31 @@ model.eval()
 correct_test = 0
 total_test = 0
 
+
+# disable gradient calculate - we are evaluating not scoring
 with torch.no_grad():
     for inputs, targets in test_loader:
+
+        # move data to piece of hardware - gpu or cpu
         inputs, targets = inputs.to(device), targets.to(device)
+        
+        # pass batch through model to get logits
         outputs = model(inputs)
+
+        # find index of highest prob class
         _, predicted = outputs.max(1)
+
+        # adds current batch to total sample count
         total_test += targets.size(0)
+
+        # counts matching predictions and adds to the running total
         correct_test += predicted.eq(targets).sum().item()
 
 final_test_acc = 100.0 * correct_test / total_test
 print(f"=== Final Test Accuracy: {final_test_acc:.2f}% ===")
 wandb.log({"final_test_accuracy": final_test_acc})
 
-# save the model state dictionary for deployment
+# save the model state dictionary for deployment using a relative path
 torch.save(model.state_dict(), "mushroom_model.pt")
 print("Model state saved to mushroom_model.pt")
 
