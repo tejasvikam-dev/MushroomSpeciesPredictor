@@ -186,11 +186,16 @@ class ConvNet(nn.Module):
         self.conv1 = nn.Conv2d(3, 32, 3, 1, 1)
         # 32 input 64 output
         self.conv2 = nn.Conv2d(32, 64, 3, 1, 1)
-
+        # 64 input 128 output
+        self.conv3 = nn.Conv2d(64, 128, 3, 1, 1)
+        # 128 input 256 output
+        self.conv3 = nn.Conv2d(128, 256, 3, 1, 1)
         self.pool = nn.MaxPool2d(2,2)
+
+        # 50% drouput rate
         self.dropout = nn.Dropout(p=0.5)
         # channels * height * width
-        self.fc1 = nn.Linear(64*56*56,512)
+        self.fc1 = nn.Linear(256 * 14 * 14, 512)
         self.fc2 = nn.Linear(512, num_classes)
 
         # 100 classes
@@ -202,10 +207,15 @@ class ConvNet(nn.Module):
         X = self.pool(X)
         X = self.relu(self.conv2(X))
         X = self.pool(X)
+        X = self.relu(self.conv3(X))
+        X = self.pool(X)
+        X = self.relu(self.conv4(X))
+        X = self.pool(X)
         X = X.flatten(start_dim=1)
         X = self.relu(self.fc1(X))
         X = self.dropout(X)
         output = self.fc2(X)
+        
         return output
 
 num_classes = len(train_dataset.classes)
@@ -237,8 +247,6 @@ for epoch in range(num_epochs):
     total_train = 0
     
     for batch_idx, (inputs, targets) in enumerate(train_loader):
-
-        # send batches to runpod gpu
         inputs, targets = inputs.to(device), targets.to(device)
         
         # completing forward pass
@@ -260,7 +268,7 @@ for epoch in range(num_epochs):
         # keeping a running tally of how many it got right
         total_train += targets.size(0)
         correct_train += predicted.eq(targets).sum().item()
-        
+
      # calculating the final grade for this round of training   
     epoch_loss = running_loss / len(train_loader.dataset)
     epoch_train_acc = 100.0 * correct_train / total_train
