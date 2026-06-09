@@ -87,7 +87,7 @@ train_transforms = v2.Compose([
     v2.ColorJitter(brightness=0.3, contrast=0.3,         # Randomly changing lighting since photos are taken in different conditions
                    saturation=0.3, hue=0.5),
     v2.RandomGrayscale(p=0.1),                           # removing color
-    v2.RandomPerspective(distortion_scale=0.3, p=0.3),  
+    v2.RandomPerspective(distortion_scale=0.3, p=0.3),  # changes angle of photo 
     v2.Normalize(mean=[0.485, 0.456, 0.406],             # Normalizing using ImageNet stats since mushroom images are natural photos
                  std=[0.229, 0.224, 0.225]),
 ])
@@ -129,7 +129,7 @@ train_loader = DataLoader(
     train_dataset,
     batch_size=32,
     shuffle=True,       # Shuffling train data so the model doesnt memorize order
-    num_workers=4,
+    num_workers=8,
     pin_memory=True
 )
 
@@ -138,7 +138,7 @@ val_loader = DataLoader(
     val_dataset,
     batch_size=32,
     shuffle=False,
-    num_workers=4,
+    num_workers=8,
     pin_memory=True
 )
 
@@ -147,7 +147,7 @@ test_loader = DataLoader(
     test_dataset,
     batch_size=32,
     shuffle=False,
-    num_workers=4,
+    num_workers=8,
     pin_memory=True
 )
 
@@ -193,7 +193,7 @@ class ConvNet(nn.Module):
         self.pool = nn.MaxPool2d(2,2)
 
         # 50% drouput rate
-        self.dropout = nn.Dropout(p=0.5)
+        self.dropout = nn.Dropout(p=0.3)
         # channels * height * width
         self.fc1 = nn.Linear(256 * 14 * 14, 512)
         self.fc2 = nn.Linear(512, num_classes)
@@ -226,7 +226,7 @@ model = ConvNet(num_classes=num_classes).to(device)
 criterion = nn.CrossEntropyLoss()
 
 # changes weights depending on how it is scored
-optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=0.001)
+optimizer = torch.optim.Adam(model.parameters(), lr=0.0001, weight_decay=0.001)
 
 # learning rate decay - decreases learning rate after each epoch
 scheduler = ExponentialLR(optimizer, gamma=0.9)
@@ -267,6 +267,7 @@ for epoch in range(num_epochs):
 
         # keeping a running tally of how many it got right
         total_train += targets.size(0)
+        # how many predictions matched targets 
         correct_train += predicted.eq(targets).sum().item()
 
      # calculating the final grade for this round of training   
