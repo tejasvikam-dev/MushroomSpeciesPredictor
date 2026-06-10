@@ -334,6 +334,7 @@ wandb.log({"final_test_accuracy": final_test_acc})
 
 # save the model state dictionary for deployment using a relative path
 torch.save(model.state_dict(), "mushroom_model.pt")
+wandb.save("mushroom_model.pt")
 print("Model state saved to mushroom_model.pt")
 
 wandb.finish()
