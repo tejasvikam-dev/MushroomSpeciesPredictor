@@ -11,6 +11,7 @@ import torch.nn as nn
 import torchvision.models as models
 import wandb
 from torch.optim.lr_scheduler import ExponentialLR
+from sklearn.metrics import f1_score, confusion_matrix
 
 
 # defining where our data is stored
@@ -238,6 +239,10 @@ wandb.init(project="MushroomSpeciesPredictor", name="CNN_run_1")
 
 num_epochs = 32
 
+# keeping the train and val loss from each epoch so we can graph them at the end
+train_losses = []
+val_losses = []
+
 
 print("\nStarting Training Loop")
 for epoch in range(num_epochs):
@@ -278,22 +283,34 @@ for epoch in range(num_epochs):
     model.eval()
     correct_val = 0
     total_val = 0
+    val_loss = 0.0
     # turning off weight calculation
     with torch.no_grad():
         for inputs, targets in val_loader:
             inputs, targets = inputs.to(device), targets.to(device)
             outputs = model(inputs)
+
+            # scoring the val batch so we have a val loss to plot
+            loss = criterion(outputs, targets)
+            val_loss += loss.item() * inputs.size(0)
+
             _, predicted = outputs.max(1)
             total_val += targets.size(0)
             correct_val += predicted.eq(targets).sum().item()
             
+    epoch_val_loss = val_loss / len(val_loader.dataset)
     epoch_val_acc = 100.0 * correct_val / total_val
+
+    # saving this epoch's losses for the graph later
+    train_losses.append(epoch_loss)
+    val_losses.append(epoch_val_loss)
     
-    print(f"Epoch [{epoch+1}/{num_epochs}] | Train Loss: {epoch_loss:.4f} | Train Acc: {epoch_train_acc:.2f}% | Val Acc: {epoch_val_acc:.2f}%")
+    print(f"Epoch [{epoch+1}/{num_epochs}] | Train Loss: {epoch_loss:.4f} | Val Loss: {epoch_val_loss:.4f} | Train Acc: {epoch_train_acc:.2f}% | Val Acc: {epoch_val_acc:.2f}%")
     
     # log metrics to WandB
     wandb.log({
         "train_loss": epoch_loss, 
+        "val_loss": epoch_val_loss,
         "train_accuracy": epoch_train_acc,
         "val_accuracy": epoch_val_acc
     })
@@ -307,6 +324,10 @@ print("\nRunning Final Test Evaluation...")
 model.eval()
 correct_test = 0
 total_test = 0
+
+# keeping every prediction and real label so we can do F1 and the confusion matrix after
+all_preds = []
+all_targets = []
 
 
 # disable gradient calculate - we are evaluating not scoring
@@ -328,13 +349,51 @@ with torch.no_grad():
         # counts matching predictions and adds to the running total
         correct_test += predicted.eq(targets).sum().item()
 
+        # storing this batch's guesses and answers for the metrics below
+        all_preds.extend(predicted.cpu().numpy())
+        all_targets.extend(targets.cpu().numpy())
+
 final_test_acc = 100.0 * correct_test / total_test
-print(f"=== Final Test Accuracy: {final_test_acc:.2f}% ===")
-wandb.log({"final_test_accuracy": final_test_acc})
+print(f"   Final Test Accuracy: {final_test_acc:.2f}% ")
+
+# F1 score - weighted so it accounts for the uneven image counts across our species
+final_test_f1 = f1_score(all_targets, all_preds, average="weighted")
+print(f" Weighted F1 Score: {final_test_f1:.4f} ")
+
+wandb.log({
+    "final_test_accuracy": final_test_acc,
+    "final_test_f1": final_test_f1
+})
+
+# confusion matrix - too many classes for number labels so we just show it as a heatmap
+cm = confusion_matrix(all_targets, all_preds)
+plt.figure(figsize=(14, 12))
+plt.imshow(cm, cmap="Blues")
+plt.colorbar()
+plt.title("Confusion Matrix - Test Set")
+plt.xlabel("Predicted label")
+plt.ylabel("True label")
+plt.tight_layout()
+plt.savefig("confusion_matrix.png", dpi=100)
+plt.close()
+print("Saved the confusion matrix to confusion_matrix.png")
+
+# graphing train vs validation loss across all the epochs
+plt.figure(figsize=(10, 6))
+plt.plot(range(1, num_epochs + 1), train_losses, label="Train Loss")
+plt.plot(range(1, num_epochs + 1), val_losses, label="Val Loss")
+plt.xlabel("Epoch")
+plt.ylabel("Loss")
+plt.title("Train vs Validation Loss")
+plt.legend()
+plt.tight_layout()
+plt.savefig("loss_curve.png", dpi=100)
+plt.close()
+print("Saved the loss curve to loss_curve.png")
 
 # save the model state dictionary for deployment using a relative path
 torch.save(model.state_dict(), "mushroom_model.pt")
 wandb.save("mushroom_model.pt")
-print("Model state saved to mushroom_model.pt")
+print("Model state is saved to mushroom_model.pt")
 
 wandb.finish()
